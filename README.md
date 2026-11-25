@@ -8,6 +8,8 @@
 
 应用只处理用户主动分享的文件。它不读取微信数据库，不注入微信进程，也不上传文件。
 
+[下载最新版本](https://github.com/oaeen/wechat-share/releases/latest)
+
 ## 功能
 
 - 从微信的“合并转发”菜单直接保存 ZIP，支持一次分享多个文件。
@@ -24,7 +26,15 @@
 
 ## 安装
 
-仓库当前不提供在线发布渠道。可以从源码构建，或生成 DMG 后安装。
+### 下载安装包
+
+从 [GitHub Releases](https://github.com/oaeen/wechat-share/releases/latest) 下载 `微信记录-0.1.0.dmg` 和对应的 `.sha256` 文件。将两个文件放在同一目录，校验安装包：
+
+```bash
+shasum -a 256 -c 微信记录-0.1.0.dmg.sha256
+```
+
+打开 DMG 后，将 `微信记录.app` 拖入 `Applications`。发行包使用本地 ad-hoc 签名，没有 Developer ID 签名和 Apple 公证，Gatekeeper 可能阻止首次启动。
 
 ### 从源码安装
 
@@ -40,16 +50,6 @@ INSTALL_DIR=/Applications Scripts/install.sh
 ```
 
 `~/Applications` 只对当前用户可见，不需要管理员权限。`/Applications` 供所有用户使用，写入时可能需要管理员权限。
-
-### 生成 DMG
-
-```bash
-Scripts/make-dmg.sh
-```
-
-输出为 `dist/微信记录-<版本>.dmg`，同时生成 `.sha256` 校验文件。打开 DMG 后，将 `微信记录.app` 拖入 `Applications`。
-
-这些构建使用本地 ad-hoc 签名，没有 Developer ID 签名和 Apple 公证。首次在其他机器上打开时，Gatekeeper 可能阻止启动。
 
 ## 使用
 
@@ -73,7 +73,7 @@ Scripts/make-dmg.sh
 | `Scripts/install.sh` | 安装现有构建，注册并启用分享扩展。 |
 | `Scripts/verify.sh` | 运行测试，检查发布构建、签名、沙盒权限和分享扩展注册状态。 |
 | `Scripts/test-share.sh` | 通过系统分享服务执行端到端测试，并逐字节比较源文件与落盘文件。 |
-| `Scripts/make-dmg.sh` | 构建 DMG 和 SHA-256 校验文件。 |
+| `Scripts/make-dmg.sh` | 构建 DMG 和只含文件名的 SHA-256 校验文件。 |
 
 `Scripts/test-share.sh` 要求分享扩展已安装并启用。测试会向 `~/Downloads/聊天存档/` 写入一个 ZIP，并校验文件内容。
 

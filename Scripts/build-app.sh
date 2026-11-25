@@ -38,6 +38,9 @@ install -m 755 "$BIN_DIR/ChatArchiveShare" "$APPEX/Contents/MacOS/ChatArchiveSha
 install -m 644 "$ROOT/Resources/Share-Info.plist" "$APPEX/Contents/Info.plist"
 install -m 644 "$ICON" "$APPEX/Contents/Resources/AppIcon.icns"
 
+# Strip local build paths from the shipped binaries before signing.
+xcrun strip -x "$APP/Contents/MacOS/ChatArchive" "$APPEX/Contents/MacOS/ChatArchiveShare"
+
 codesign --force --sign - --entitlements "$ROOT/Resources/ChatArchiveShare.entitlements" "$APPEX"
 codesign --force --sign - "$APP"
 

@@ -32,5 +32,8 @@ hdiutil create \
     -fs HFS+ \
     "$DMG" >/dev/null
 
-shasum -a 256 "$DMG" > "$DMG.sha256"
+(
+    cd "$(dirname "$DMG")"
+    shasum -a 256 "$(basename "$DMG")"
+) > "$DMG.sha256"
 echo "$DMG"

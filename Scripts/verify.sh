@@ -21,6 +21,10 @@ test -f "$APP/Contents/Resources/Icons/message-square-share.svg"
 test -f "$APP/Contents/Resources/Icons/message-square-text.svg"
 test -f "$APP/Contents/Resources/Icons/trash-2.svg"
 test -f "$APP/Contents/Resources/Licenses/Lucide-ISC.txt"
+if grep -R -a -q -e "$HOME" -e "$ROOT" "$APP" 2>/dev/null; then
+    echo "发布构建包含本机路径。" >&2
+    exit 1
+fi
 codesign --verify --deep --strict --verbose=2 "$APP"
 codesign -d --entitlements :- "$APPEX" 2>/dev/null | grep -q "com.apple.security.files.downloads.read-write"
 
