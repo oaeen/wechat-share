@@ -115,3 +115,7 @@ Tests/                核心逻辑单元测试
 ## 贡献
 
 提交变更前运行 `Scripts/verify.sh`。测试和示例必须使用合成数据，不要提交真实聊天记录、姓名、邮箱或本机路径。报告问题时请附上 macOS 版本、微信版本和复现步骤。
+
+## 许可证
+
+本项目原创代码采用 MIT License，见 [`LICENSE`](LICENSE)。`Resources/Icons` 中的 Lucide 图标仍按 ISC License 分发，详见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
