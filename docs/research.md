@@ -1,69 +1,71 @@
-# 调研：微信聊天记录转发到“其他应用”
+# 微信聊天记录转发接口调研
 
-## 结论
+## 摘要
 
-微信没有公开的聊天记录转发 API。微信只是把合并转发的内容交给操作系统的分享机制：
+截至当前调研，微信没有公开的聊天记录转发 API。合并转发时，微信把聊天记录打包为 ZIP，再交给操作系统的分享机制。接收方需要注册为系统分享目标，不能调用微信私有接口。
 
-- macOS 微信 4.1.13 起，合并转发会生成包含 TXT、图片和视频的 ZIP，并通过 `NSSharingServicePicker` 展示系统分享目标。接收方必须是一个 `com.apple.share-services` 扩展。
-- Windows 微信 4.x 通过 Windows 的 `windows.shareTarget` 契约枚举第三方应用。目标应用需要 MSIX 包身份，在清单中声明 Share Target，接收 `StorageItems`，再用 WinRT 读取微信交给系统的文件。
+| 平台 | 分享目标 | 接收接口 |
+| --- | --- | --- |
+| macOS | `com.apple.share-services` 扩展 | `NSExtensionContext` 与 `NSItemProvider` |
+| Windows | MSIX `windows.shareTarget` | `IShareTargetActivatedEventArgs` 与 `ShareOperation` |
 
-因此，项目真正依赖的是操作系统的公开扩展机制，不是微信私有接口，也不涉及读取微信数据库或注入微信进程。
+本仓库实现 macOS 版。Windows 版只有设计文档，见 [`windows.md`](windows.md)。
 
-## macOS 链路
+## macOS 分享扩展
 
-接收端由应用包内的 `.appex` 提供。
+在微信 macOS 4.1.13 上，合并转发会生成一个 ZIP，内容可包含文本、图片和视频。微信通过系统分享面板把 ZIP 交给接收应用。
 
-1. 扩展 `Info.plist` 声明 `NSExtensionPointIdentifier = com.apple.share-services`。
-2. 微信把合并转发结果作为文件交给 `NSExtensionContext.inputItems`。
-3. 扩展遍历 `NSExtensionItem.attachments`，得到 `NSItemProvider`。
-4. 用 `loadFileRepresentation(forTypeIdentifier:)` 读取文件。临时文件在回调闭包返回后会被系统删除，所以复制必须发生在回调内部。
-5. 系统分享面板中的显示名来自扩展的 `CFBundleDisplayName`，图标来自宿主应用。
+接收端位于应用包的 `Contents/PlugIns` 目录，是一个 `.appex` 扩展：
 
-macOS 版的应用名和系统分享入口都显示为 **微信记录**。
+1. `Info.plist` 声明 `NSExtensionPointIdentifier = com.apple.share-services`。
+2. 微信把分享内容放入 `NSExtensionContext.inputItems`。
+3. 扩展遍历 `NSExtensionItem.attachments`，取得 `NSItemProvider`。
+4. `NSItemProvider.loadFileRepresentation(forTypeIdentifier:)` 提供临时文件 URL。该文件会在回调结束后删除，扩展必须在回调内复制文件。
+5. 分享面板中的名称来自扩展的 `CFBundleDisplayName`，图标来自宿主应用。
 
-Windows 分享目标的显示名不能直接复用这个名称，原因见下文的微信枚举过滤规则。
+当前扩展声明最多接收 32 个文件。实现位于 `Sources/ChatArchiveShare`，文件保存和命名逻辑位于 `Sources/ChatArchiveCore`。
 
 参考：
 
-- Apple App Extension Programming Guide: <https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/Share.html>
-- `NSExtensionContext`: <https://developer.apple.com/documentation/foundation/nsextensioncontext>
-- `NSItemProvider`: <https://developer.apple.com/documentation/foundation/nsitemprovider>
+- [App Extension Programming Guide: Share](https://developer.apple.com/library/archive/documentation/General/Conceptual/ExtensibilityPG/Share.html)
+- [`NSExtensionContext`](https://developer.apple.com/documentation/foundation/nsextensioncontext)
+- [`NSItemProvider`](https://developer.apple.com/documentation/foundation/nsitemprovider)
 
-## Windows 链路
+## Windows 分享目标
 
-微信 Windows 不在进程间调用自定义 API，而是使用 Windows 的 Share Target 契约。对实现方来说，核心类型是：
+Windows 微信 4.x 使用 Windows Share Target 契约。接收应用需要 MSIX 包身份，并在应用清单中声明 `windows.shareTarget`。微信启动目标应用后，应用从激活参数中读取分享数据：
 
 ```csharp
+using Windows.ApplicationModel;
+using Windows.ApplicationModel.Activation;
+using Windows.ApplicationModel.DataTransfer;
+
 var activated = AppInstance.GetActivatedEventArgs();
 var share = (IShareTargetActivatedEventArgs)activated;
 var items = await share.ShareOperation.Data.GetStorageItemsAsync();
 ```
 
-每个分享项通常是一个 `StorageFile`。微信的合并转发产物是 ZIP；接收方应在报告完成前复制文件内容，因为分享宿主提供的文件可能是临时文件。
+每个分享项通常是 `StorageFile`。源文件可能是临时文件，接收方必须在本次激活结束前完成复制。
+
+公开实现还记录了几条没有官方文档支持的微信侧约束：
+
+- 分享目标显示名包含连续的 `微信`、`WeChat` 或 `Weixin` 时，微信会隐藏该目标。
+- 只声明 `.zip` 且只有一个 `DataFormat` 时，微信枚举阶段可能丢弃该目标。
+- 修改注册信息后，需要结束 `Weixin` 和 `WeChatAppEx` 进程，再重新打开微信。
+
+这些约束来自实测，不能视为稳定的微信 API 契约。Windows 清单和验证步骤见 [`windows.md`](windows.md)。
 
 参考：
 
-- Share Target 清单元素：<https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-sharetarget>
-- 接收分享数据：<https://learn.microsoft.com/en-us/windows/apps/develop/windows-integration/integrate-sharesheet-receive>
-- `ShareOperation`：<https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.datatransfer.sharetarget.shareoperation>
+- [Share target manifest](https://learn.microsoft.com/en-us/uwp/schemas/appxpackage/uapmanifestschema/element-uap-sharetarget)
+- [Receive shared data](https://learn.microsoft.com/en-us/windows/apps/develop/windows-integration/integrate-sharesheet-receive)
+- [`ShareOperation`](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.datatransfer.sharetarget.shareoperation)
+- [ChatPCBridge](https://github.com/bwjoke/ChatPCBridge)
+- [WeChatBridge](https://github.com/freestylefly/WeChatBridge)
+- [dsh-wechat-share](https://github.com/Tuiltex-0216/dsh-wechat-share)
 
-### 微信侧的非官方约束
+## 证据范围
 
-以下行为来自能正常在微信菜单中显示的公开实现与其实测记录，不是腾讯官方文档：
+macOS 实现已经通过 `Scripts/test-share.sh` 验证。测试使用系统 `NSSharingService` 启动扩展，并逐字节比较源文件与下载目录中的结果。
 
-- `DisplayName` 含连续的 `微信`、`WeChat` 或 `Weixin` 子串时，微信会隐藏该分享目标。
-- 只声明 `.zip` 且只声明一个 `DataFormat` 时，微信枚举阶段会丢掉该目标；腾讯自己的可显示包使用 `SupportsAnyFileType` 加 `StorageItems`、`Text`、`URI`、`Bitmap`。
-- 分享目标运行时可能是 `mediumIL`，不能直接启动任意外部进程。落盘应由分享目标自己完成，需要主界面时另设 full-trust 宿主。
-- 改完注册信息后，微信的 `WeChatAppEx` 菜单缓存不会立即刷新；要结束微信相关进程再重新打开。
-
-相关开源实现：
-
-- ChatPCBridge：<https://github.com/bwjoke/ChatPCBridge>
-- 微信流 WeChatBridge：<https://github.com/freestylefly/WeChatBridge>
-- dsh-wechat-share：<https://github.com/Tuiltex-0216/dsh-wechat-share>
-
-## 为什么当前交付 macOS 版
-
-任务提供的截图是 macOS 分享面板，开发机也是 macOS。此时可以完成真实的系统注册、扩展启动和沙盒落盘测试；Windows 版则需要 Windows 机器、MSIX 签名工具和微信客户端做同样级别的验证。
-
-在没有 Windows 验证环境的情况下直接提交 Windows 可执行代码，会把清单过滤、包身份、签名和沙盒问题留给用户试错，不符合“完成并验证”的标准。因此当前仓库先交付可实机使用的 macOS 版，并把 Windows 的接口、清单形态和实现约束单独记录在 [`windows.md`](windows.md)。
+Windows 行为来自微软文档、公开实现的说明和其排障记录。仓库没有 Windows 构建产物，也没有在 Windows 微信上执行端到端验证。正式实现前需要在 Windows 上完成注册、签名、沙盒和文件一致性测试。

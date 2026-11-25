@@ -1,34 +1,40 @@
-# Windows 实现方案
+# Windows Share Target 实现方案
 
-本文件是 Windows 版的实现规格与验证清单，不是已在 Windows 上编译的产物。
+状态：设计稿，尚未在 Windows 上编译或发布。
 
-macOS 版当前显示为“微信记录”。由于微信 Windows 会过滤含连续 `微信` / `WeChat` / `Weixin` 的分享目标显示名，下面的 Windows 清单暂用“聊天存档”作为显示名。
+本文给出 Windows 版的实现范围、关键接口和验证条件。macOS 版的实现与验证结果见仓库 [README](../README.md)。
 
-## 目标行为
+## 目标流程
 
 ```text
 微信多选消息
   → 合并转发
   → 其他应用
   → 聊天存档
-  → 原始 ZIP 自动保存到 %USERPROFILE%\Downloads\聊天存档
+  → %USERPROFILE%\Downloads\聊天存档
 ```
 
-微信不会调用第三方私有接口，接收端需要注册为 Windows Share Target。
+微信 Windows 会过滤含连续 `微信`、`WeChat` 或 `Weixin` 的分享目标显示名，因此 Windows 版暂用“聊天存档”作为入口名称。
 
-## 技术栈
+## 运行环境
 
-- .NET 8 或 .NET 10
-- `net8.0-windows10.0.19041.0`
-- C# / WinRT 投影（`Microsoft.Windows.CsWinRT`）
-- MSIX 稀疏包或完整包
-- 可选 WPF / WinUI 主窗口
+- Windows 10 版本 2004（内部版本 19041）或更新版本。
+- .NET 10 LTS 或更新版本。
+- Windows SDK，包含 `MakeAppx.exe` 和 `signtool.exe`。
+- MSIX 包身份和受本机信任的开发证书，或正式代码签名证书。
 
-分享目标本身应保持无窗口、快速结束。设置、历史列表和“打开下载目录”放在主程序里；分享目标只负责接收、复制、报告完成。
+## 技术选型
 
-## MSIX 清单
+- 使用 C# 和 .NET 的 WinRT 投影读取分享数据。
+- 使用 MSIX 完整包，或以稀疏包提供包身份。
+- 分享目标保持无窗口，收到文件后立即保存并结束。
+- 主窗口独立于分享目标，负责历史列表、设置和打开下载目录。
 
-核心声明如下：
+分享目标以 `mediumIL` 运行。它不能启动任意外部进程，文件保存应在分享目标内部完成。
+
+## 注册分享目标
+
+清单的关键声明如下。片段省略了 XML 命名空间声明。
 
 ```xml
 <Identity
@@ -77,16 +83,19 @@ macOS 版当前显示为“微信记录”。由于微信 Windows 会过滤含�
 </Application>
 ```
 
-`SupportsAnyFileType` 看起来比 `.zip` 宽，但这是微信菜单枚举的兼容要求。运行时仍然只处理 ZIP 或其他明确允许的文件类型，不能把宽声明当成放宽业务校验。
+`SupportsAnyFileType` 是为兼容微信枚举而使用的宽声明。运行时仍需检查文件类型，只保存允许的文件。
 
-## 激活与保存
+清单中的 `Publisher` 必须与签名证书主体一致，否则 MSIX 安装或注册会失败。
 
-入口程序应使用系统 Inbox WinRT API，不要依赖 Windows App SDK 的 `Microsoft.Windows.AppLifecycle.AppInstance`；稀疏包引入 Windows App SDK 时容易在激活阶段出现 `REGDB_E_CLASSNOTREG`。
+## 接收分享
+
+使用系统 WinRT API 读取激活参数。不要使用 Windows App SDK 的 `Microsoft.Windows.AppLifecycle.AppInstance`，稀疏包在激活阶段可能返回 `REGDB_E_CLASSNOTREG`。
 
 ```csharp
 using Windows.ApplicationModel;
 using Windows.ApplicationModel.Activation;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Storage;
 
 var activated = AppInstance.GetActivatedEventArgs();
 if (activated is not IShareTargetActivatedEventArgs share)
@@ -112,14 +121,18 @@ foreach (var item in items)
         return;
     }
 
-    // 必须在本次激活结束前读取内容；源文件可能是临时文件。
+    // 必须在本次激活结束前复制文件，源路径可能是临时文件。
 }
 
 operation.ReportDataRetrieved();
 operation.ReportCompleted();
 ```
 
-保存路径：
+生产实现还需要捕获异常，并在失败时调用 `ReportError`。
+
+## 保存文件
+
+目标目录：
 
 ```csharp
 var downloads = Path.Combine(
@@ -129,69 +142,55 @@ var downloads = Path.Combine(
 Directory.CreateDirectory(downloads);
 ```
 
-逐文件复制时使用相同的原子落盘策略：
+保存流程应与 macOS 版保持一致：
 
-1. 在目标目录写 `.chatarchive-<uuid>.part`。
-2. 文件名清洗、去重。
-3. 写完后再移动到最终文件名。
-4. 失败时删除临时文件，不影响已存在的存档。
+1. 校验源文件存在且不是目录。
+2. 清洗文件名，通用名称追加时间戳。
+3. 在目标目录写入 `.chatarchive-<id>.part`。
+4. 复制完成后移动到最终文件名。
+5. 遇到同名文件时追加 `-2`、`-3`，不覆盖已有存档。
+6. 任一步失败时删除临时文件。
 
-## 显示名与文件名
+## 微信兼容性
 
-微软和腾讯都没有公开“微信分享菜单过滤”的完整规则。根据开源项目的实测：
+以下规则来自公开实现和实测记录，不是腾讯或微软的稳定契约：
 
-```text
-显示名包含连续的 微信 / WeChat / Weixin → 微信菜单隐藏
-只声明 .zip 且只有一个 DataFormat → 微信枚举阶段丢弃
-```
+- 显示名包含连续的 `微信`、`WeChat` 或 `Weixin` 时，微信会隐藏目标。
+- 只声明 `.zip` 且只有一个 `DataFormat` 时，微信可能不显示目标。
+- `SupportsAnyFileType` 配合 `StorageItems`、`Text`、`URI`、`Bitmap` 可以出现在微信菜单中。
+- 微信会缓存分享目标列表。更新注册后，结束 `Weixin` 和 `WeChatAppEx` 进程，再重新打开微信。
 
-因此：
+实现和发布前应重新测试当前微信版本，不要把这些规则当作长期接口保证。
 
-- 分享入口使用 **聊天存档**，不带微信品牌词。
-- `SupportedFileTypes` 使用 `SupportsAnyFileType`。
-- `DataFormat` 同时声明 `StorageItems`、`Text`、`URI`、`Bitmap`。
-- 运行时再校验实际收到的内容。
+参考实现：
 
-这些规则不是官方 API 契约，微信版本升级后必须重新实机验证。可参考 ChatPCBridge 的实现和 WeChatBridge 的 Windows 排障记录：
+- [ChatPCBridge](https://github.com/bwjoke/ChatPCBridge)
+- [WeChatBridge](https://github.com/freestylefly/WeChatBridge)
+- [dsh-wechat-share](https://github.com/Tuiltex-0216/dsh-wechat-share)
 
-- <https://github.com/bwjoke/ChatPCBridge>
-- <https://github.com/freestylefly/WeChatBridge>
-- <https://github.com/Tuiltex-0216/dsh-wechat-share>
+## 构建与安装
 
-## 安装与签名
+1. `dotnet publish` 生成分享目标可执行文件。
+2. 生成 `AppxManifest.xml` 和图标资源。
+3. 使用 `MakeAppx pack` 生成 MSIX。
+4. 使用 `signtool sign` 签名。
+5. 在开发机信任签名证书。
+6. 使用 `Add-AppxPackage` 安装完整包，或用 `-ExternalLocation` 注册稀疏包。
+7. 结束微信进程并重新打开。
+8. 在微信“转发到其他应用”中确认“聊天存档”出现。
 
-开发机需要：
-
-1. Windows 10 19041 或更新版本。
-2. Windows SDK 的 `MakeAppx.exe`、`signtool.exe`。
-3. 已安装 .NET SDK。
-4. 一个受本机信任的开发证书，或正式代码签名证书。
-
-流程：
-
-1. `dotnet publish` 生成 share target 可执行文件。
-2. 生成或更新 `AppxManifest.xml` 和图标资源。
-3. `MakeAppx pack` 打包 MSIX。
-4. `signtool sign` 签名。
-5. 信任开发证书。
-6. `Add-AppxPackage -ExternalLocation <install-root>` 注册稀疏包。
-7. 结束全部 `Weixin` / `WeChatAppEx` 进程，重新打开微信。
-8. 在微信的“转发到其他应用”中确认 **聊天存档** 出现。
-
-系统文件资源管理器右键分享里能看到目标，只能证明系统注册成功；微信菜单有自己的枚举缓存和过滤规则，两者必须分别验证。
+资源管理器右键菜单中出现目标，只能说明 Windows 已注册分享目标。微信有独立的枚举和过滤逻辑，必须在微信内单独验证。
 
 ## 验证清单
 
 - [ ] `Get-AppxPackage` 能查到分享目标包。
-- [ ] `ShareTarget.exe --registration-check` 能打印 package identity 和 AUMID。
-- [ ] 资源管理器右键分享能看到“聊天存档”。
-- [ ] 微信重启后，“其他应用”能看到“聊天存档”。
-- [ ] 分享合成 ZIP 后，目标目录出现字节一致的文件。
-- [ ] 同名 ZIP 保存两次不覆盖。
+- [ ] 分享目标能输出 package identity 和 AUMID。
+- [ ] Windows 资源管理器分享菜单显示“聊天存档”。
+- [ ] 微信“其他应用”菜单显示“聊天存档”。
+- [ ] 分享 ZIP 后，目标目录出现字节一致的文件。
+- [ ] 同一 ZIP 保存两次不会覆盖。
 - [ ] 通用文件名会追加时间戳。
-- [ ] 微信关闭期间分享不会留下无法解释的错误。
-- [ ] 卸载 MSIX 后，分享入口消失，下载目录中的存档不被删除。
+- [ ] 分享临时文件在激活结束后不再被引用。
+- [ ] 卸载 MSIX 后分享入口消失，已有存档不被删除。
 
-## 当前状态
-
-Windows 版尚未在 Windows 实机上编译、安装和通过真实微信分享验证。macOS 版已完成同等链路中的注册、系统分享扩展启动、沙盒落盘和字节一致性验证。
+当前仓库没有 Windows 工程和构建产物。上述清单需要在 Windows 实机上逐项验证后，才能将 Windows 版标记为可用。
