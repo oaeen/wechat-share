@@ -59,6 +59,20 @@ Scripts/install.sh
 
 `Scripts/install.sh` 会安装到 `~/Applications/微信记录.app`，注册并启用分享扩展，然后打开应用。默认不需要管理员权限。
 
+开发版默认放在用户目录，避免安装时请求管理员权限；DMG 内的 `Applications` 链接指向 `/Applications`，拖入后是系统级安装。需要把开发版直接装到系统目录时，可以运行：
+
+```bash
+INSTALL_DIR=/Applications Scripts/install.sh
+```
+
+打包 DMG：
+
+```bash
+Scripts/make-dmg.sh
+```
+
+输出在 `dist/微信记录-<版本>.dmg`，并生成对应的 `.sha256` 校验文件。安装包使用本地 ad-hoc 签名，未做 Apple Developer ID 签名和公证。
+
 ## 验证
 
 本机实际执行结果：
