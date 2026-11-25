@@ -20,7 +20,7 @@
 
 ## 环境要求
 
-- macOS 14 或更新版本。
+- Apple Silicon Mac，运行 macOS 14 或更新版本。
 - 微信 macOS。分享入口已在微信 4.1.13 上验证。
 - 从源码构建需要 Swift 6 工具链和 Xcode Command Line Tools。
 
