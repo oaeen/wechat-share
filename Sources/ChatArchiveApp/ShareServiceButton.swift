@@ -14,11 +14,9 @@ struct ShareServiceButton: NSViewRepresentable {
         button.isBordered = false
         button.focusRingType = .none
         button.imagePosition = .imageOnly
-        button.imageScaling = .scaleProportionallyDown
-        button.image = NSImage(
-            systemSymbolName: "square.and.arrow.up",
-            accessibilityDescription: help
-        )
+        button.imageScaling = .scaleNone
+        button.frame = NSRect(x: 0, y: 0, width: 20, height: 20)
+        button.image = resizedIcon(named: "share-2", size: 14)
         button.contentTintColor = .secondaryLabelColor
         button.toolTip = help
         button.target = context.coordinator
@@ -29,6 +27,17 @@ struct ShareServiceButton: NSViewRepresentable {
     func updateNSView(_ button: NSButton, context: Context) {
         context.coordinator.url = url
         button.toolTip = help
+    }
+
+    private func resizedIcon(named name: String, size: CGFloat) -> NSImage? {
+        guard let source = LucideAssets.image(named: name) else { return nil }
+        let target = NSImage(size: NSSize(width: size, height: size))
+        target.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        source.draw(in: NSRect(x: 0, y: 0, width: size, height: size))
+        target.unlockFocus()
+        target.isTemplate = true
+        return target
     }
 
     final class Coordinator: NSObject, NSSharingServicePickerDelegate {

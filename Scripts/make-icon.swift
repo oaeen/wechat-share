@@ -1,12 +1,15 @@
 import AppKit
 import Foundation
 
-guard CommandLine.arguments.count == 2 else {
-    FileHandle.standardError.write(Data("usage: make-icon.swift <iconset-directory>\n".utf8))
+guard CommandLine.arguments.count == 3 else {
+    FileHandle.standardError.write(
+        Data("usage: make-icon.swift <iconset-directory> <lucide-svg>\n".utf8)
+    )
     exit(2)
 }
 
 let output = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
+let iconSource = URL(fileURLWithPath: CommandLine.arguments[2])
 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
 
 let entries: [(String, Int)] = [
@@ -59,68 +62,22 @@ for (name, pixels) in entries {
     context.saveGState()
     context.addPath(rounded)
     context.clip()
-    let colors = [
-        NSColor(calibratedRed: 0.10, green: 0.82, blue: 0.45, alpha: 1).cgColor,
-        NSColor(calibratedRed: 0.02, green: 0.58, blue: 0.29, alpha: 1).cgColor,
-    ] as CFArray
-    let gradient = CGGradient(
-        colorsSpace: CGColorSpaceCreateDeviceRGB(),
-        colors: colors,
-        locations: [0, 1]
-    )!
-    context.drawLinearGradient(
-        gradient,
-        start: CGPoint(x: 512, y: 932),
-        end: CGPoint(x: 512, y: 92),
-        options: []
-    )
+    context.setFillColor(NSColor(calibratedRed: 0.03, green: 0.76, blue: 0.38, alpha: 1).cgColor)
+    context.fill(tile)
     context.restoreGState()
 
-    context.setFillColor(NSColor.white.withAlphaComponent(0.46).cgColor)
-    context.addPath(CGPath(
-        roundedRect: CGRect(x: 250, y: 500, width: 430, height: 300),
-        cornerWidth: 125,
-        cornerHeight: 125,
-        transform: nil
-    ))
-    context.fillPath()
-    context.beginPath()
-    context.move(to: CGPoint(x: 318, y: 515))
-    context.addLine(to: CGPoint(x: 448, y: 515))
-    context.addLine(to: CGPoint(x: 286, y: 410))
-    context.closePath()
-    context.fillPath()
-
-    context.setFillColor(NSColor.white.cgColor)
-    context.addPath(CGPath(
-        roundedRect: CGRect(x: 354, y: 292, width: 462, height: 346),
-        cornerWidth: 142,
-        cornerHeight: 142,
-        transform: nil
-    ))
-    context.fillPath()
-    context.beginPath()
-    context.move(to: CGPoint(x: 432, y: 306))
-    context.addLine(to: CGPoint(x: 562, y: 306))
-    context.addLine(to: CGPoint(x: 392, y: 200))
-    context.closePath()
-    context.fillPath()
-
-    context.setFillColor(NSColor(calibratedRed: 0.02, green: 0.58, blue: 0.29, alpha: 1).cgColor)
-    let lines = [
-        CGRect(x: 450, y: 522, width: 270, height: 38),
-        CGRect(x: 450, y: 448, width: 210, height: 38),
-        CGRect(x: 450, y: 374, width: 238, height: 38),
-    ]
-    for line in lines {
-        context.addPath(CGPath(
-            roundedRect: line,
-            cornerWidth: 19,
-            cornerHeight: 19,
-            transform: nil
-        ))
-        context.fillPath()
+    var svg = try String(contentsOf: iconSource, encoding: .utf8)
+    svg = svg.replacingOccurrences(of: "currentColor", with: "#FFFFFF")
+    svg = svg.replacingOccurrences(of: "stroke-width=\"2\"", with: "stroke-width=\"2.4\"")
+    guard let icon = NSImage(data: Data(svg.utf8)) else {
+        fatalError("cannot load icon svg: \(iconSource.path)")
     }
+    icon.draw(
+        in: NSRect(x: 252, y: 252, width: 520, height: 520),
+        from: .zero,
+        operation: .sourceOver,
+        fraction: 1
+    )
 
     NSGraphicsContext.restoreGraphicsState()
 

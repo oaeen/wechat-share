@@ -8,19 +8,23 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            if !store.shareEntryInstalled {
+                registrationBanner
+            }
             if store.archives.isEmpty {
-                emptyState
+                EmptyStateView()
             } else {
                 ScrollView {
                     archiveList
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, 24)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 52)
+                        .padding(.bottom, 20)
                 }
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        .frame(minWidth: 620, minHeight: 420)
+        .ignoresSafeArea(.container, edges: .top)
+        .frame(minWidth: 540, minHeight: 380)
         .onAppear { store.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             store.refresh()
@@ -38,82 +42,32 @@ struct ContentView: View {
         }
     }
 
-    private var header: some View {
-        HStack(spacing: 12) {
-            logo
-            Text("微信记录")
-                .font(.system(size: 24, weight: .semibold))
-            Spacer(minLength: 18)
-            statusIcon
-            iconButton("folder", help: "打开下载文件夹") {
-                store.openFolder()
-            }
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 36)
-        .padding(.bottom, 16)
-    }
-
-    private var logo: some View {
-        Group {
-            if let icon = Self.appIcon {
-                Image(nsImage: icon)
-                    .resizable()
-                    .interpolation(.high)
-            } else {
-                Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(ChatArchiveTheme.accent)
-            }
-        }
-        .frame(width: 44, height: 44)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
-    private static let appIcon: NSImage? = {
-        guard let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns") else {
-            return nil
-        }
-        return NSImage(contentsOf: url)
-    }()
-
-    @ViewBuilder
-    private var statusIcon: some View {
-        if !store.shareEntryInstalled {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 13, weight: .semibold))
+    private var registrationBanner: some View {
+        HStack(spacing: 8) {
+            LucideIcon(name: "triangle-alert", size: 13)
                 .foregroundStyle(.orange)
-                .help("分享入口未注册")
-                .padding(.trailing, 2)
-        }
-    }
-
-    private func iconButton(
-        _ systemName: String,
-        help: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 13, weight: .semibold))
+            Text("分享入口未注册")
+                .font(.caption)
                 .foregroundStyle(.secondary)
-                .frame(width: 30, height: 30)
-                .background(Circle().fill(Color.primary.opacity(0.055)))
+            Spacer()
         }
-        .buttonStyle(.plain)
-        .help(help)
+        .padding(.horizontal, 20)
+        .padding(.top, 52)
     }
 
     private var archiveList: some View {
         VStack(spacing: 0) {
             ForEach(Array(store.archives.enumerated()), id: \.element.id) { index, archive in
-                ArchiveRow(archive: archive) {
-                    store.reveal(archive)
-                } onCopyPath: {
-                    store.copyPath(archive)
-                }
+                ArchiveRow(
+                    archive: archive,
+                    onReveal: { store.reveal(archive) },
+                    onCopyPath: { store.copyPath(archive) },
+                    onDelete: {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            store.delete(archive)
+                        }
+                    }
+                )
                 if index < store.archives.count - 1 {
                     Divider()
                         .padding(.leading, 58)
@@ -123,18 +77,6 @@ struct ContentView: View {
         .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(cardBorder)
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "tray")
-                .font(.system(size: 38, weight: .light))
-                .foregroundStyle(.tertiary)
-            Text("暂无存档")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var cardBackground: some View {
@@ -148,10 +90,64 @@ struct ContentView: View {
     }
 }
 
+private struct EmptyStateView: View {
+    @State private var faceIndex = 0
+    @State private var bubbleFloat = false
+    @State private var contentAppeared = false
+
+    private static let faces = [
+        "(￣▽￣)",
+        "(・ω・)ノ",
+        "(｡･ω･｡)",
+        "(￣ω￣;)",
+        "( ´ ▽ ` )",
+    ]
+
+    var body: some View {
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(ChatArchiveTheme.accent.opacity(0.09))
+                    .frame(width: 104, height: 104)
+                    .scaleEffect(bubbleFloat ? 1.02 : 0.98)
+                LucideIcon(name: "message-square-text", size: 42)
+                    .foregroundStyle(ChatArchiveTheme.accent)
+                    .offset(y: bubbleFloat ? -2.5 : 2.5)
+                    .rotationEffect(.degrees(bubbleFloat ? 1.2 : -1.2))
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Text("这里还很安静")
+                    .font(.system(size: 15, weight: .medium))
+                Text(Self.faces[faceIndex])
+                    .font(.system(size: 13, design: .monospaced))
+                    .contentTransition(.opacity)
+            }
+            .opacity(contentAppeared ? 1 : 0)
+            .offset(y: contentAppeared ? 0 : 6)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.5)) {
+                contentAppeared = true
+            }
+            withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) {
+                bubbleFloat = true
+            }
+        }
+        .onReceive(Timer.publish(every: 4, on: .main, in: .common).autoconnect()) { _ in
+            withAnimation(.easeInOut(duration: 0.35)) {
+                faceIndex = (faceIndex + 1) % Self.faces.count
+            }
+        }
+    }
+}
+
 private struct ArchiveRow: View {
     let archive: ArchiveFile
     let onReveal: () -> Void
     let onCopyPath: () -> Void
+    let onDelete: () -> Void
 
     @State private var isHovering = false
     @State private var didCopy = false
@@ -161,9 +157,11 @@ private struct ArchiveRow: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(ChatArchiveTheme.accent.opacity(0.1))
-                Image(systemName: archive.url.pathExtension.lowercased() == "zip" ? "doc.zipper" : "doc.text")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(ChatArchiveTheme.accent)
+                LucideIcon(
+                    name: archive.url.pathExtension.lowercased() == "zip" ? "file-archive" : "file-text",
+                    size: 14
+                )
+                .foregroundStyle(ChatArchiveTheme.accent)
             }
             .frame(width: 32, height: 32)
 
@@ -178,9 +176,9 @@ private struct ArchiveRow: View {
 
             Spacer(minLength: 16)
 
-            HStack(spacing: 12) {
+            HStack(spacing: 8) {
                 ShareServiceButton(url: archive.url, help: "转发到其他应用")
-                    .frame(width: 14, height: 14)
+                    .frame(width: 20, height: 20)
 
                 Button {
                     onCopyPath()
@@ -190,23 +188,30 @@ private struct ArchiveRow: View {
                         didCopy = false
                     }
                 } label: {
-                    Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 13, weight: .medium))
+                    LucideIcon(name: didCopy ? "check" : "copy", size: 14)
                         .foregroundStyle(didCopy ? ChatArchiveTheme.accent : .secondary)
+                        .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.plain)
                 .help("复制文件地址")
 
                 Button(action: onReveal) {
-                    Image(systemName: "arrow.up.forward.square")
-                        .font(.system(size: 13, weight: .medium))
+                    LucideIcon(name: "folder-open", size: 14)
                         .foregroundStyle(.secondary)
+                        .frame(width: 20, height: 20)
                 }
                 .buttonStyle(.plain)
                 .help("在访达中显示")
+
+                Button(action: onDelete) {
+                    LucideIcon(name: "trash-2", size: 14)
+                        .foregroundStyle(isHovering ? Color.red.opacity(0.8) : .secondary)
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .help("移到废纸篓")
             }
             .opacity(isHovering ? 1 : 0.55)
-
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)

@@ -10,8 +10,17 @@ CONFIG="${CONFIG:-release}" "$ROOT/Scripts/build-app.sh"
 APP="$ROOT/dist/微信记录.app"
 APPEX="$APP/Contents/PlugIns/ChatArchiveShare.appex"
 
+if grep -R -n -E 'Image\(systemName:|NSImage\(systemSymbolName:' "$ROOT/Sources/ChatArchiveApp"; then
+    echo "界面图标必须使用 Lucide，不能混入 SF Symbols。" >&2
+    exit 1
+fi
+
 test -x "$APP/Contents/MacOS/ChatArchive"
 test -x "$APPEX/Contents/MacOS/ChatArchiveShare"
+test -f "$APP/Contents/Resources/Icons/message-square-share.svg"
+test -f "$APP/Contents/Resources/Icons/message-square-text.svg"
+test -f "$APP/Contents/Resources/Icons/trash-2.svg"
+test -f "$APP/Contents/Resources/Licenses/Lucide-ISC.txt"
 codesign --verify --deep --strict --verbose=2 "$APP"
 codesign -d --entitlements :- "$APPEX" 2>/dev/null | grep -q "com.apple.security.files.downloads.read-write"
 

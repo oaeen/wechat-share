@@ -34,15 +34,6 @@ final class ArchiveStore: ObservableObject {
         shareEntryInstalled = Self.isShareEntryRegistered()
     }
 
-    func openFolder() {
-        do {
-            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
-            NSWorkspace.shared.open(folderURL)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
     func reveal(_ archive: ArchiveFile) {
         NSWorkspace.shared.activateFileViewerSelecting([archive.url])
     }
@@ -50,6 +41,15 @@ final class ArchiveStore: ObservableObject {
     func copyPath(_ archive: ArchiveFile) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(archive.url.path, forType: .string)
+    }
+
+    func delete(_ archive: ArchiveFile) {
+        do {
+            try FileManager.default.trashItem(at: archive.url, resultingItemURL: nil)
+            archives.removeAll { $0.id == archive.id }
+        } catch {
+            errorMessage = "无法移到废纸篓：\(error.localizedDescription)"
+        }
     }
 
     func clearError() {

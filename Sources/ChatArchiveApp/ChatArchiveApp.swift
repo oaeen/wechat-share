@@ -1,4 +1,5 @@
 import AppKit
+import ChatArchiveCore
 import SwiftUI
 
 @main
@@ -9,12 +10,20 @@ struct ChatArchiveApp: App {
         Window("微信记录", id: "main") {
             ContentView()
         }
-        .defaultSize(width: 660, height: 480)
+        .defaultSize(width: 620, height: 440)
         .defaultPosition(.center)
         .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)
         .commands {
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                Button("打开下载文件夹") {
+                    guard let folder = try? ChatArchiveLocation.archiveDirectory(create: true) else {
+                        return
+                    }
+                    NSWorkspace.shared.open(folder)
+                }
+                .keyboardShortcut("o")
+            }
         }
     }
 }
@@ -45,6 +54,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !isOnVisibleScreen {
             window.center()
         }
+        window.isMovableByWindowBackground = true
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
     }

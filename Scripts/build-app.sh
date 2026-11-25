@@ -16,15 +16,22 @@ BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
 ICONSET="$ROOT/.build/ChatArchive.iconset"
 ICON="$ROOT/.build/AppIcon.icns"
 rm -rf "$ICONSET" "$ICON"
-swift "$ROOT/Scripts/make-icon.swift" "$ICONSET"
+swift "$ROOT/Scripts/make-icon.swift" "$ICONSET" "$ROOT/Resources/Icons/message-square-share.svg"
 iconutil -c icns "$ICONSET" -o "$ICON"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APPEX/Contents/MacOS" "$APPEX/Contents/Resources"
+mkdir -p \
+    "$APP/Contents/MacOS" \
+    "$APP/Contents/Resources/Icons" \
+    "$APP/Contents/Resources/Licenses" \
+    "$APPEX/Contents/MacOS" \
+    "$APPEX/Contents/Resources"
 
 install -m 755 "$BIN_DIR/ChatArchive" "$APP/Contents/MacOS/ChatArchive"
 install -m 644 "$ROOT/Resources/App-Info.plist" "$APP/Contents/Info.plist"
 install -m 644 "$ICON" "$APP/Contents/Resources/AppIcon.icns"
+install -m 644 "$ROOT/Resources/Icons/"*.svg "$APP/Contents/Resources/Icons/"
+install -m 644 "$ROOT/Resources/Licenses/"* "$APP/Contents/Resources/Licenses/"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 install -m 755 "$BIN_DIR/ChatArchiveShare" "$APPEX/Contents/MacOS/ChatArchiveShare"
