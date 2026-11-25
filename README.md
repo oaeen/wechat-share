@@ -28,10 +28,10 @@
 
 ### 下载安装包
 
-从 [GitHub Releases](https://github.com/oaeen/wechat-share/releases/latest) 下载 `微信记录-0.1.0.dmg` 和对应的 `.sha256` 文件。将两个文件放在同一目录，校验安装包：
+从 [GitHub Releases](https://github.com/oaeen/wechat-share/releases/latest) 下载 `ChatArchive-0.1.0.dmg` 和对应的 `.sha256` 文件。将两个文件放在同一目录，校验安装包：
 
 ```bash
-shasum -a 256 -c 微信记录-0.1.0.dmg.sha256
+shasum -a 256 -c ChatArchive-0.1.0.dmg.sha256
 ```
 
 打开 DMG 后，将 `微信记录.app` 拖入 `Applications`。发行包使用本地 ad-hoc 签名，没有 Developer ID 签名和 Apple 公证，Gatekeeper 可能阻止首次启动。

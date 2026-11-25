@@ -17,7 +17,7 @@ if [[ "${SKIP_BUILD:-0}" != "1" || ! -d "$APP" ]]; then
 fi
 
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")
-DMG="${DMG_PATH:-$ROOT/dist/微信记录-$VERSION.dmg}"
+DMG="${DMG_PATH:-$ROOT/dist/ChatArchive-$VERSION.dmg}"
 
 mkdir -p "$STAGING"
 ditto "$APP" "$STAGING/微信记录.app"
